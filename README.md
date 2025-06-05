@@ -92,7 +92,3 @@ Organized by category:
 ## License
 
 MIT – free to use and modify.
-
----
-
-If you want, I can also help you write a short usage guide or the batch file to launch the script. Would you like that?
