@@ -6,9 +6,10 @@ import re
 import os
 
 # === CONFIG ===
-WEBHOOK_PLAYER_EVENTS = "hidden"
-WEBHOOK_ACHIEVEMENTS = "hidden"
-LOG_PATH = r"C:\Path\logs\latest.log"
+# Replace hidden with your Discord Webhoook (right click on channel and select integration). Replace log path with your actual log path.
+WEBHOOK_PLAYER_EVENTS = "https://discordapp.com/api/webhooks/1379278355429593179/axeJb-u8eamGtshkUonoYHBImBFUGEvADYHsVzk6ure3TtgCdB05CJS_iVd-EoMuZGAG"
+WEBHOOK_ACHIEVEMENTS = "https://discordapp.com/api/webhooks/1379575587592732814/Fj8ayLofaE2K1Oyk_cPC25E2jqo2CjI3H1-dI55QISmxP4Xj9_rPdZ1o2ee2rg8wI0Wj"
+LOG_PATH = r"C:\Users\Name\Desktop\Crafty\servers\server\logs\latest.log"
 DATA_FILE = "mc_player_data.json"
 
 # Session & global tracking
@@ -45,7 +46,10 @@ def utcnow():
     return datetime.now(timezone.utc)
 
 def send_discord_message(webhook_url, embed):
-    requests.post(webhook_url, json={"embeds": [embed]})
+    try:
+        requests.post(webhook_url, json={"embeds": [embed]})
+    except Exception as e:
+        print(f"Error sending discord message: {e}")
 
 def format_embed(title, description, color=0x00ff00):
     return {
@@ -62,6 +66,17 @@ def reset_daily_data_if_needed(player, now):
         pdata["daily_date"] = today_str
         pdata["daily_play_seconds"] = 0
         pdata["deaths_today"] = 0
+
+def check_global_daily_reset():
+    today_str = utcnow().date().isoformat()
+    if data["daily"].get("date") != today_str:
+        data["daily"]["date"] = today_str
+        data["daily"]["first_death_done"] = False
+        for p in data["players"].values():
+            p["deaths_today"] = 0
+            p["daily_play_seconds"] = 0
+        save_data()
+        print(f"Global daily data reset for {today_str}")
 
 def player_joined(player):
     now = utcnow()
@@ -135,7 +150,7 @@ def player_left(player):
     if not pdata:
         return
 
-    start = datetime.fromisoformat(SESSION_STARTS[player].isoformat())
+    start = SESSION_STARTS[player]
     session_length = (now - start).total_seconds()
     pdata["total_play_seconds"] += session_length
 
@@ -197,40 +212,38 @@ def unlock_achievement(player, title, desc):
     save_data()
 
 def process_death(line):
-    # Example death line: "[...]: Steve was blown up by Creeper"
     for cause, pattern in DEATH_PATTERNS.items():
-        if pattern.match(line):
+        if pattern.search(line):
             player = extract_player_from_death(line)
             if not player:
                 return
             pdata = data["players"].setdefault(player, {"deaths_today": 0, "achievements": {}})
             pdata["total_deaths"] = pdata.get("total_deaths", 0) + 1
-            # Death magnet: 10 deaths in one day (date checking needed)
+
+            # Use global daily reset check to keep date current, but double check here
             today_str = utcnow().date().isoformat()
             if data["daily"].get("date") != today_str:
                 data["daily"]["date"] = today_str
                 data["daily"]["first_death_done"] = False
-                # reset daily deaths
                 for p in data["players"].values():
                     p["deaths_today"] = 0
+                    p["daily_play_seconds"] = 0
+                save_data()
 
             pdata["deaths_today"] = pdata.get("deaths_today", 0) + 1
             if pdata["deaths_today"] >= 10 and "🪦 Death Magnet" not in pdata["achievements"]:
                 unlock_achievement(player, "🪦 Death Magnet", "10 deaths in one day!")
 
-            # First Blood: first death on server that day
             if not data["daily"]["first_death_done"]:
                 unlock_achievement(player, "🏆 First Blood", "First death on the server today!")
                 data["daily"]["first_death_done"] = True
 
-            # Hardcore Moment: death under 1 minute of joining
             session_start = SESSION_STARTS.get(player)
             if session_start:
                 seconds_in = (utcnow() - session_start).total_seconds()
                 if seconds_in < 60 and "🚫 Hardcore Moment" not in pdata["achievements"]:
                     unlock_achievement(player, "🚫 Hardcore Moment", "Died immediately after joining.")
 
-            # Specific death causes
             if cause == "Kaboom" and "💥 Kaboom!" not in pdata["achievements"]:
                 unlock_achievement(player, "💥 Kaboom!", "Blown up by a creeper!")
             elif cause == "Drown" and "🌊 Just Keep Dying" not in pdata["achievements"]:
@@ -243,7 +256,6 @@ def process_death(line):
             break
 
 def extract_player_from_death(line):
-    # Simple heuristic for death logs: player is first word before "was" or "died"
     m = re.match(r"\[.+\]: (\w+) ", line)
     if m:
         return m.group(1)
@@ -257,16 +269,13 @@ def process_chat(line):
         pdata["chat_count"] = pdata.get("chat_count", 0) + 1
         pdata["last_activity"] = utcnow().isoformat()
 
-        # Chatty Crafter: 50+ chat messages
         if pdata["chat_count"] >= 50 and "🗣️ Chatty Crafter" not in pdata["achievements"]:
             unlock_achievement(player, "🗣️ Chatty Crafter", "Sent 50+ chat messages in a session!")
 
-        # DJ: used /say command (if detectable)
         if message.startswith("/say") and "🎤 DJ" not in pdata["achievements"]:
             unlock_achievement(player, "🎤 DJ", "Used /say command!")
 
 def check_idle():
-    # If player has no activity for 20+ minutes in session, award Idle King
     now = utcnow()
     for player in CURRENT_PLAYERS:
         pdata = data["players"].get(player)
@@ -280,9 +289,7 @@ def check_idle():
                     unlock_achievement(player, "💤 Idle King", "No chat or action for 20+ minutes!")
 
 def check_party_time():
-    # If 5 or more players online simultaneously
     if len(CURRENT_PLAYERS) >= 5:
-        # Award all online players Party Time if not yet unlocked
         for player in CURRENT_PLAYERS:
             pdata = data["players"].get(player)
             if pdata and "👥 Party Time" not in pdata["achievements"]:
@@ -292,6 +299,8 @@ def monitor_log():
     with open(LOG_PATH, "r", encoding="utf-8") as f:
         f.seek(0, os.SEEK_END)
         while True:
+            check_global_daily_reset()
+
             line = f.readline()
             if not line:
                 time.sleep(1)
@@ -311,7 +320,6 @@ def monitor_log():
                         process_death(line)
                         break
                 else:
-                    # Check chat lines
                     if CHAT_PATTERN.search(line):
                         process_chat(line)
 
