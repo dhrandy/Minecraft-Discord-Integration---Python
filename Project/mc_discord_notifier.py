@@ -7,8 +7,8 @@ import os
 
 # === CONFIG ===
 # Replace hidden with your Discord Webhoook (right click on channel and select integration). Replace log path with your actual log path.
-WEBHOOK_PLAYER_EVENTS = "https://discordapp.com/api/webhooks/1379278355429593179/axeJb-u8eamGtshkUonoYHBImBFUGEvADYHsVzk6ure3TtgCdB05CJS_iVd-EoMuZGAG"
-WEBHOOK_ACHIEVEMENTS = "https://discordapp.com/api/webhooks/1379575587592732814/Fj8ayLofaE2K1Oyk_cPC25E2jqo2CjI3H1-dI55QISmxP4Xj9_rPdZ1o2ee2rg8wI0Wj"
+WEBHOOK_PLAYER_EVENTS = "hidden"
+WEBHOOK_ACHIEVEMENTS = "hidden"
 LOG_PATH = r"C:\Users\Name\Desktop\Crafty\servers\server\logs\latest.log"
 DATA_FILE = "mc_player_data.json"
 
